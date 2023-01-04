@@ -17,8 +17,8 @@ use ethers::{
 use foundry_common::abi::IntoFunction;
 use hashbrown::HashMap;
 use revm::{
-    db::DatabaseCommit, return_ok, Account, BlockEnv, Bytecode, CreateScheme, ExecutionResult,
-    Return, TransactOut, TransactTo, TxEnv,
+    db::DatabaseCommit, return_ok, Account, Bytecode, CreateScheme, ExecutionResult, Return,
+    TransactOut, TransactTo, TxEnv,
 };
 /// Reexport commonly used revm types
 pub use revm::{db::DatabaseRef, Env, SpecId};
@@ -551,9 +551,6 @@ impl Executor {
     }
 
     /// Creates the environment to use when executing a transaction in a test context
-    ///
-    /// If using a backend with cheatcodes, `tx.gas_price` and `block.number` will be overwritten by
-    /// the cheatcode state inbetween calls.
     fn build_test_env(
         &self,
         caller: Address,
@@ -563,25 +560,8 @@ impl Executor {
     ) -> Env {
         Env {
             cfg: self.env.cfg.clone(),
-            // We always set the gas price to 0 so we can execute the transaction regardless of
-            // network conditions - the actual gas price is kept in `self.block` and is applied by
-            // the cheatcode handler if it is enabled
-            block: BlockEnv {
-                basefee: 0.into(),
-                gas_limit: self.gas_limit,
-                ..self.env.block.clone()
-            },
-            tx: TxEnv {
-                caller,
-                transact_to,
-                data,
-                value,
-                // As above, we set the gas price to 0.
-                gas_price: 0.into(),
-                gas_priority_fee: None,
-                gas_limit: self.gas_limit.as_u64(),
-                ..self.env.tx.clone()
-            },
+            block: self.env.block.clone(),
+            tx: TxEnv { caller, transact_to, data, value, ..self.env.tx.clone() },
         }
     }
 }
