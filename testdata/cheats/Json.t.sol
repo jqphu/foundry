@@ -71,9 +71,9 @@ contract ParseJson is DSTest {
     }
 
     function test_nestedObject() public {
-        bytes memory data = cheats.parseJson(json, ".nestedObject");
+        bytes memory data = cheats.parseJson(json, "nestedObject");
         Nested memory nested = abi.decode(data, (Nested));
-        assertEq(nested.number, 13);
+        assertEq(nested.number, 115792089237316195423570985008687907853269984665640564039457584007913129639935);
         assertEq(nested.str, "NEST");
     }
 
@@ -85,8 +85,7 @@ contract ParseJson is DSTest {
 
     function test_wholeObject() public {
         // we need to make the path relative to the crate that's running tests for it (forge crate)
-        string memory root = cheats.envString("CARGO_MANIFEST_DIR");
-        string memory path = string.concat(root, "/../testdata/fixtures/Json/wholeJson.json");
+        string memory path = "../testdata/fixtures/Json/wholeJson.json";
         console.log(path);
         json = cheats.readFile(path);
         bytes memory data = cheats.parseJson(json);
@@ -96,6 +95,41 @@ contract ParseJson is DSTest {
         assertEq(whole.uintArray[1], 43);
         assertEq(whole.strArray[0], "hai");
         assertEq(whole.strArray[1], "there");
+    }
+
+    function test_coercionRevert() public {
+        cheats.expectRevert(
+            "You can only coerce values or arrays, not JSON objects. The key '$.nestedObject' returns an object"
+        );
+        uint256 number = cheats.parseJsonUint(json, "nestedObject");
+    }
+
+    function test_coercionUint() public {
+        uint256 number = cheats.parseJsonUint(json, "hexUint");
+        assertEq(number, 1231232);
+        number = cheats.parseJsonUint(json, "stringUint");
+        assertEq(number, 115792089237316195423570985008687907853269984665640564039457584007913129639935);
+        number = cheats.parseJsonUint(json, "numberUint");
+        assertEq(number, 115792089237316195423570985008687907853269984665640564039457584007913129639935);
+        uint256[] memory numbers = cheats.parseJsonUintArray(json, ".arrayUint");
+        assertEq(numbers[0], 1231232);
+        assertEq(numbers[1], 1231232);
+        assertEq(numbers[2], 1231232);
+    }
+
+    function test_coercionInt() public {
+        int256 number = cheats.parseJsonInt(json, ".hexInt");
+        assertEq(number, -12);
+        number = cheats.parseJsonInt(json, "stringInt");
+        assertEq(number, -12);
+    }
+
+    function test_coercion_bool() public {
+        bool boolean = cheats.parseJsonBool(json, ".booleanString");
+        assertEq(boolean, true);
+        bool[] memory booleans = cheats.parseJsonBoolArray(json, ".booleanArray");
+        assert(booleans[0]);
+        assert(!booleans[1]);
     }
 }
 
@@ -134,7 +168,13 @@ contract WriteJson is DSTest {
         bytes[] memory data3 = new bytes[](3);
         data3[0] = bytes("123");
         data3[2] = bytes("fpovhpgjaiosfjhapiufpsdf");
-        string memory finalJson = vm.serializeBytes(json1, "array3", data3);
+        vm.serializeBytes(json1, "array3", data3);
+
+        uint256[] memory data4 = new uint256[](0);
+        vm.serializeUint(json1, "array4", data4);
+
+        address[] memory data5 = new address[](0);
+        string memory finalJson = vm.serializeAddress(json1, "array5", data5);
 
         string memory path = "../testdata/fixtures/Json/write_test_array.json";
         vm.writeJson(finalJson, path);
@@ -160,12 +200,40 @@ contract WriteJson is DSTest {
         assertEq(parsedData3[0], data3[0]);
         assertEq(parsedData3[1], data3[1]);
         assertEq(parsedData3[2], data3[2]);
+
+        rawData = vm.parseJson(json, ".array4");
+        uint256[] memory parsedData4 = new uint256[](0);
+        parsedData4 = abi.decode(rawData, (uint256[]));
+
+        rawData = vm.parseJson(json, ".array5");
+        address[] memory parsedData5 = new address[](0);
+        parsedData5 = abi.decode(rawData, (address[]));
+
         vm.removeFile(path);
     }
 
     struct simpleJson {
         uint256 a;
         string b;
+    }
+
+    struct notSimpleJson {
+        uint256 a;
+        string b;
+        simpleJson c;
+    }
+
+    function test_serializeNotSimpleJson() public {
+        string memory json3 = "json3";
+        string memory path = "../testdata/fixtures/Json/write_complex_test.json";
+        vm.serializeUint(json3, "a", uint256(123));
+        string memory semiFinal = vm.serializeString(json3, "b", "test");
+        string memory finalJson = vm.serializeString(json3, "c", semiFinal);
+        console.log(finalJson);
+        vm.writeJson(finalJson, path);
+        string memory json = vm.readFile(path);
+        bytes memory data = vm.parseJson(json);
+        notSimpleJson memory decodedData = abi.decode(data, (notSimpleJson));
     }
 
     function test_writeJson() public {
